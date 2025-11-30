@@ -19,7 +19,7 @@ def to_ascii(texto: str) -> str:
 
 
 # --------------------------------------------------------------
-# 🧠 PROMPT DE CORRECCIÓN DE TEXTO (EL MISMO QUE YA USABAS)
+# 🧠 PROMPT DE CORRECCIÓN DE TEXTO
 # --------------------------------------------------------------
 SYSTEM_PROMPT = to_ascii("""
 Eres un asistente de escritura en espanol.
@@ -131,8 +131,10 @@ def generar_recomendacion_lph(p: Paciente) -> str:
 
     problemas_alimentacion = any(
         x in sintomas
-        for x in ["no gana peso", "baja de peso", "dificultad para alimentarse",
-                  "tarda mucho en comer", "se atora", "sale leche por la nariz"]
+        for x in [
+            "no gana peso", "baja de peso", "dificultad para alimentarse",
+            "tarda mucho en comer", "se atora", "sale leche por la nariz"
+        ]
     )
     problemas_habla = any(
         x in sintomas
@@ -150,75 +152,81 @@ def generar_recomendacion_lph(p: Paciente) -> str:
     # 🔴 1) POSIBLE URGENCIA / COMPLICACIONES POSTOPERATORIAS
     if postoperatorio and (sangrado_importante or fiebre_alta or dificultad_respirar or dolor_intenso or signos_infeccion_herida):
         return (
-            "Sugerir que el paciente acuda de inmediato a un servicio de urgencias y contacte al equipo tratante, "
+            "Se sugiere que el paciente acuda de inmediato a un servicio de urgencias y contacte al equipo tratante, "
             "por posibles complicaciones posoperatorias relacionadas con labio y/o paladar fisurado."
         )
 
     # 🟠 2) LACTANTES CON PROBLEMAS DE ALIMENTACIÓN / PESO
     if segmento == "lactante" and problemas_alimentacion:
         return (
-            "Priorizar valoracion presencial en corto plazo para revisar alimentacion, ganancia de peso "
-            "y tecnica de alimentacion en contexto de labio y/o paladar fisurado. "
-            "Se puede considerar apoyo de nutricion y terapia orofacial segun criterio del equipo clinico."
+            "Se recomienda priorizar valoracion presencial en corto plazo para revisar alimentacion, ganancia de peso "
+            "y tecnica de alimentacion en contexto de labio y/o paladar fisurado, considerando apoyo de nutricion "
+            "y terapia orofacial segun criterio del equipo clinico."
         )
 
     # 🟡 3) PROBLEMAS DE HABLA / AUDICIÓN EN INFANCIA / ESCOLAR / ADOLESCENTE
     if segmento in ["primera_infancia", "escolar", "adolescente"] and (problemas_habla or signos_otitis):
         return (
-            "Recomendar programar valoracion interdisciplinaria (fonoaudiologia y otorrinolaringologia) "
-            "para evaluar habla y audicion en paciente con labio y/o paladar fisurado."
+            "Se recomienda programar valoracion interdisciplinaria (fonoaudiologia y otorrinolaringologia) "
+            "para evaluar habla y audicion en un paciente con labio y/o paladar fisurado."
         )
 
     # 🟡 4) IMPACTO EMOCIONAL EN ADOLESCENTES Y ADULTOS
     if segmento in ["adolescente", "adulto"] and impacto_emocional:
         return (
-            "Sugerir valoracion por psicologia o trabajo social para abordar impacto emocional, "
-            "autoimagen y posibles situaciones de rechazo o bullying asociadas al labio y/o paladar fisurado."
+            "Se sugiere valoracion por psicologia o trabajo social para abordar impacto emocional, autoimagen "
+            "y posibles situaciones de rechazo o bullying asociadas al labio y/o paladar fisurado."
         )
 
     # 🟢 5) CASO BASE: SEGUIMIENTO PROGRAMADO
     return (
-        "Sugerir seguimiento ambulatorio dentro de la ruta habitual de cuidado para labio y/o paladar fisurado, "
-        "ajustando la prioridad segun la disponibilidad del equipo interdisciplinario."
+        "Se recomienda control ambulatorio en el marco de la ruta integral de cuidado para labio y/o paladar fisurado, "
+        "ajustando la prioridad segun criterio del equipo interdisciplinario."
     )
 
 
 # --------------------------------------------------------------
-# 🤖 OPCIONAL: RECOMENDACIÓN ENRIQUECIDA CON OPENAI (LPH)
+# 🤖 PROMPT TÉCNICO PARA REFINAR RECOMENDACIÓN (OPENAI)
 # --------------------------------------------------------------
-SYSTEM_PROMPT_LPH = to_ascii("""
-Eres un profesional de la salud que apoya a un equipo interdisciplinario
+SYSTEM_PROMPT_RECOM_TECNICA = to_ascii("""
+Eres un profesional de la salud que redacta planes de manejo para un equipo interdisciplinario
 que atiende a personas con labio y/o paladar fisurado.
 
-Tu tarea es sugerir un tipo de recomendacion NO DIAGNOSTICA en lenguaje claro
-para la familia y para el equipo tratante.
+Tu tarea es redactar UNA SOLA recomendacion tecnica breve (2 o 3 frases maximo),
+dirigida al equipo de salud, sin emitir diagnosticos ni indicar medicamentos.
 
-SIEMPRE debes responder con un solo parrafo corto, sin diagnosticar ni indicar medicamentos.
-No uses markdown. No des ordenes tajantes, usa expresiones como "se puede sugerir",
-"es recomendable considerar", "el equipo tratante podria valorar".
-
-La recomendacion debe ser SIEMPRE considerada como apoyo y debera ser revisada
-por el equipo clinico de la institucion.
+REGLAS:
+- Usa lenguaje tecnico-clinico pero claro.
+- No des diagnosticos ni nombres de enfermedades.
+- No indiques farmacos ni dosis.
+- Puedes referirte a valoraciones (nutricion, fonoaudiologia, psicologia, otorrinolaringologia, cirugia, etc.).
+- Usa tercera persona y un tono profesional.
+- No uses markdown ni viñetas.
 """)
 
-def generar_recomendacion_lph_con_ia(p: Paciente, modelo: str = "gpt-4o-mini") -> str:
-    segmento = segmentar_paciente_lph(p.edad)
-    user_prompt = to_ascii(f"""
-Paciente con labio y/o paladar fisurado.
-Edad (anios): {p.edad}
-Segmento: {segmento}
-Sintomas o motivo de consulta: {p.sintomas}
-Antecedentes relevantes: {p.antecedentes or 'No reporta'}
 
-Genera una recomendacion breve y general, sin diagnosticos,
-solo sobre tipo de atencion sugerida (ej. seguimiento, valoracion prioritaria,
-consulta interdisciplinaria, apoyo emocional, etc.).
+def refinar_recomendacion_tecnica(p: Paciente, recomendacion_base: str, modelo: str = "gpt-4o-mini") -> str:
+    segmento = segmentar_paciente_lph(p.edad)
+
+    user_prompt = to_ascii(f"""
+Contexto del paciente:
+- Diagnostico de base: labio y/o paladar fisurado.
+- Edad (anios): {p.edad}
+- Segmento: {segmento}
+- Sintomas o motivo de consulta (texto libre): {p.sintomas}
+- Antecedentes relevantes: {p.antecedentes or 'No reporta'}
+
+Recomendacion base sugerida por el sistema:
+{recomendacion_base}
+
+A partir de esta informacion, redacta UNA recomendacion tecnica breve (2-3 frases),
+dirigida al equipo de salud, coherente con la recomendacion base y con el contexto de labio/paladar fisurado.
 """)
 
     response = client.responses.create(
         model=modelo,
         input=[
-            {"role": "system", "content": SYSTEM_PROMPT_LPH},
+            {"role": "system", "content": SYSTEM_PROMPT_RECOM_TECNICA},
             {"role": "user",   "content": user_prompt}
         ]
     )
@@ -226,7 +234,7 @@ consulta interdisciplinaria, apoyo emocional, etc.).
     try:
         texto = response.output_text.strip()
     except Exception:
-        texto = "No se pudo generar una recomendacion automatica. El caso debe ser revisado por el equipo clinico."
+        texto = recomendacion_base  # fallback si algo sale mal
 
     return texto
 
@@ -235,26 +243,30 @@ consulta interdisciplinaria, apoyo emocional, etc.).
 # 🔵 ENDPOINT PRINCIPAL
 # --------------------------------------------------------------
 @app.post("/recomendar")
-def recomendar(p: Paciente, usar_ia_en_recomendacion: bool = False):
+def recomendar(p: Paciente, usar_ia_en_recomendacion: bool = True):
     """
     Endpoint que devuelve:
-    - recomendacion: basada en LPH + edad (reglas o IA)
+    - recomendacion: basada en LPH + edad (reglas + opcional refinamiento IA tecnico)
     - correccion / sugerencia / explicacion: correccion de texto de sintomas
     """
 
-    # 1️⃣ RECOMENDACIÓN PRINCIPAL (LPH + EDAD)
-    if usar_ia_en_recomendacion:
-        recomendacion = generar_recomendacion_lph_con_ia(p)
-    else:
-        recomendacion = generar_recomendacion_lph(p)
+    # 1️⃣ Reglas: generan recomendacion_base (deterministica, auditable)
+    recomendacion_base = generar_recomendacion_lph(p)
 
-    # 2️⃣ CORRECCIÓN DE TEXTO (OpenAI, igual que antes)
+    # 2️⃣ IA: refina el texto para que suene mas tecnico (si esta activado)
+    if usar_ia_en_recomendacion:
+        recomendacion = refinar_recomendacion_tecnica(p, recomendacion_base)
+    else:
+        recomendacion = recomendacion_base
+
+    # 3️⃣ Correccion del texto de sintomas (tu proceso original)
     correccion = corregir_texto(p.sintomas)
 
-    # 3️⃣ RESPUESTA PARA GOOGLE SHEETS
+    # 4️⃣ Respuesta para Google Sheets / front
     return {
         "recomendacion": recomendacion,
         "correccion": correccion["correccion"],
         "sugerencia": correccion["sugerencia"],
         "explicacion": correccion["explicacion"]
     }
+
